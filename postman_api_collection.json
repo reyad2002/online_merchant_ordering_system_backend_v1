@@ -1,0 +1,638 @@
+{
+  "info": {
+    "name": "Menu Backend API",
+    "description": "Full request/response details for all endpoints. Import into Postman. Use Login to get access_token, then set collection variable `token`.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "token", "value": "" },
+    { "key": "merchantId", "value": "" },
+    { "key": "branchId", "value": "" },
+    { "key": "tableId", "value": "" },
+    { "key": "userId", "value": "" },
+    { "key": "orderId", "value": "" },
+    { "key": "menuId", "value": "" },
+    { "key": "categoryId", "value": "" },
+    { "key": "itemId", "value": "" },
+    { "key": "variantId", "value": "" },
+    { "key": "groupId", "value": "" },
+    { "key": "modifierId", "value": "" }
+  ],
+  "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }] },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "POST Login",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"your_username\",\n  \"password\": \"your_password\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/login",
+            "description": "**Request body:** `name` (string, required), `password` (string, required)\n\n**Response 200:** `{ \"access_token\": \"jwt...\", \"user\": { \"id\", \"name\", \"merchant_id\", \"branch_id\", \"role\", \"status\", \"created_at\" } }`\n\n**Response 400:** `{ \"error\": \"name and password required\" }`\n**Response 401:** `{ \"error\": \"Invalid name or password\" }`\n**Response 403:** `{ \"error\": \"Account disabled\" }`",
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "exec": "var json = pm.response.json();\nif (json.access_token) {\n  pm.collectionVariables.set('token', json.access_token);\n}",
+                  "type": "text/javascript"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST Logout",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/auth/logout",
+            "description": "**Request:** No body. Header: `Authorization: Bearer <token>`\n\n**Response 200:** `{ \"message\": \"Logged out\" }`"
+          }
+        },
+        {
+          "name": "GET Me",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/auth/me",
+            "description": "**Request:** Header: `Authorization: Bearer <token>`\n\n**Response 200:** `{ \"id\", \"name\", \"merchant_id\", \"branch_id\", \"role\", \"status\", \"created_at\" }` (no password_hash)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Public",
+      "item": [
+        {
+          "name": "GET Menu",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/public/menu?merchantId={{merchantId}}&tableCode=",
+              "host": ["{{baseUrl}}"],
+              "path": ["public", "menu"],
+              "query": [
+                { "key": "merchantId", "value": "{{merchantId}}", "description": "Required. Merchant UUID." },
+                { "key": "tableCode", "value": "", "description": "Optional. Table QR code to set branch_id, table_id in response." }
+              ]
+            },
+            "description": "**Request query:** `merchantId` (required), `tableCode` (optional)\n\n**Response 200:** `{ merchant_id, branch_id, table_id, menu: {...}, categories: [{ ...cat, items: [{ ...item, variants: [], modifier_groups: [] }] }] }`\n\n**Response 400:** `{ \"error\": \"merchantId required\" }`\n**Response 404:** `{ \"error\": \"Menu not found\" }`"
+          }
+        },
+        {
+          "name": "POST Validate Cart",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"merchant_id\": \"uuid\",\n  \"branch_id\": \"uuid\",\n  \"table_id\": null,\n  \"items\": [\n    { \"item_id\": \"uuid\", \"variant_id\": null, \"quantity\": 2, \"modifiers\": [{ \"modifier_id\": \"uuid\", \"quantity\": 1 }] }\n  ]\n}"
+            },
+            "url": "{{baseUrl}}/public/cart/validate",
+            "description": "**Request body:** `merchant_id`, `branch_id` (required), `table_id` (optional), `items` (array of { item_id, variant_id?, quantity, modifiers? })\n\n**Response 200:** `{ is_valid, errors: [], totals: { subtotal, total }, line_items: [] }`\n\n**Response 400:** `{ \"error\": \"merchant_id, branch_id, and items required\" }` or `{ \"error\": \"branch_id must belong to the given merchant_id\" }`"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "GET Health",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": "{{baseUrl}}/health",
+            "description": "**Response 200:** `{ \"ok\": true }`"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Orders",
+      "item": [
+        {
+          "name": "POST Create Order",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"merchant_id\": \"uuid\",\n  \"branch_id\": \"uuid\",\n  \"table_id\": null,\n  \"order_type\": \"dine_in\",\n  \"customer_name\": null,\n  \"customer_phone\": null,\n  \"notes\": null,\n  \"items\": [\n    { \"item_id\": \"uuid\", \"variant_id\": null, \"quantity\": 1, \"modifiers\": [{ \"modifier_id\": \"uuid\", \"quantity\": 1 }] }\n  ]\n}"
+            },
+            "url": "{{baseUrl}}/orders",
+            "description": "**Request body:** merchant_id, branch_id, order_type (dine_in|pickup|delivery), table_id?, customer_name?, customer_phone?, notes?, items (array of { item_id, variant_id?, quantity, modifiers? })\n\n**Response 201:** `{ order_id, order_number, status, total_price }`\n\n**Response 400:** errors for missing fields, invalid order_type, branch/table validation"
+          }
+        },
+        {
+          "name": "GET List Orders",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/orders?branch_id=&status=&from=&to=&q=&limit=50&cursor=",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders"],
+              "query": [
+                { "key": "branch_id" },
+                { "key": "status" },
+                { "key": "from" },
+                { "key": "to" },
+                { "key": "q" },
+                { "key": "limit", "value": "50" },
+                { "key": "cursor" }
+              ]
+            },
+            "description": "**Auth:** Bearer (Staff). **Query:** branch_id?, status?, from?, to?, q?, limit?, cursor?\n\n**Response 200:** `{ data: [order,...], next_cursor }`"
+          }
+        },
+        {
+          "name": "GET One Order",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/orders/{{orderId}}",
+            "description": "**Auth:** Bearer (Staff). **Path:** orderId\n\n**Response 200:** `{ ...order, items: [{ ...orderItem, modifiers: [] }] }`\n**Response 404:** `{ \"error\": \"Order not found\" }`"
+          }
+        },
+        {
+          "name": "PATCH Order Status",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"accepted\"\n}"
+            },
+            "url": "{{baseUrl}}/orders/{{orderId}}/status",
+            "description": "**Request body:** `status` (one of: draft, placed, accepted, preparing, ready, completed, cancelled)\n\n**Response 200:** updated order object\n**Response 400/404:** error"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Merchants",
+      "item": [
+        {
+          "name": "POST Create Merchant",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Merchant Name\",\n  \"logo\": null,\n  \"hexa_color_1\": null,\n  \"hexa_color_2\": null\n}" },
+            "url": "{{baseUrl}}/merchants",
+            "description": "**Auth:** Owner. **Body:** name (required), logo?, hexa_color_1?, hexa_color_2?\n\n**Response 201:** merchant object"
+          }
+        },
+        {
+          "name": "GET List Merchants",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/merchants",
+            "description": "**Auth:** Owner. Returns current user's merchant as array.\n\n**Response 200:** `[ { ...merchant } ]`"
+          }
+        },
+        {
+          "name": "PATCH Update Merchant",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"New Name\",\n  \"logo\": null,\n  \"has_color_1\": null,\n  \"has_color_2\": null,\n  \"status\": \"active\"\n}" },
+            "url": "{{baseUrl}}/merchants/{{merchantId}}",
+            "description": "**Auth:** Owner. **Body:** name?, logo?, has_color_1?, has_color_2?, status?\n\n**Response 200:** updated merchant\n**Response 403:** Can only update your own merchant"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Branches",
+      "item": [
+        {
+          "name": "POST Create Branch",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Branch Name\",\n  \"address\": null,\n  \"phone\": null,\n  \"is_active\": true\n}" },
+            "url": "{{baseUrl}}/branches",
+            "description": "**Auth:** Owner. **Body:** name (required), address?, phone?, is_active?\n\n**Response 201:** branch object (merchant_id from token)"
+          }
+        },
+        {
+          "name": "GET List Branches",
+          "request": { "method": "GET", "url": "{{baseUrl}}/branches", "description": "**Auth:** Owner. **Response 200:** array of branches" }
+        },
+        {
+          "name": "PATCH Update Branch",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Updated\",\n  \"address\": null,\n  \"phone\": null,\n  \"is_active\": true\n}" },
+            "url": "{{baseUrl}}/branches/{{branchId}}",
+            "description": "**Auth:** Owner. **Body:** name?, address?, phone?, is_active?\n\n**Response 200:** branch\n**Response 404:** Branch not found"
+          }
+        },
+        {
+          "name": "DELETE Branch",
+          "request": { "method": "DELETE", "url": "{{baseUrl}}/branches/{{branchId}}", "description": "**Auth:** Owner. **Response 204**" }
+        },
+        {
+          "name": "POST Create Table",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"number\": 1,\n  \"seats\": 4,\n  \"is_active\": true,\n  \"qr_code\": null\n}" },
+            "url": "{{baseUrl}}/branches/{{branchId}}/tables",
+            "description": "**Auth:** Owner. **Body:** number (required), seats?, is_active?, qr_code? (auto-generated if omitted)\n\n**Response 201:** table object"
+          }
+        },
+        {
+          "name": "GET List Tables by Branch",
+          "request": { "method": "GET", "url": "{{baseUrl}}/branches/{{branchId}}/tables", "description": "**Auth:** Owner. **Response 200:** array of tables" }
+        }
+      ]
+    },
+    {
+      "name": "Tables",
+      "item": [
+        {
+          "name": "PATCH Update Table",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"number\": 2,\n  \"seats\": 6,\n  \"is_active\": true,\n  \"qr_code\": \"ABC1\"\n}" },
+            "url": "{{baseUrl}}/tables/{{tableId}}",
+            "description": "**Auth:** Owner. **Body:** number?, seats?, is_active?, qr_code?\n\n**Response 200:** table"
+          }
+        },
+        {
+          "name": "DELETE Table",
+          "request": { "method": "DELETE", "url": "{{baseUrl}}/tables/{{tableId}}", "description": "**Auth:** Owner. **Response 204**" }
+        },
+        {
+          "name": "GET Table QR",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/tables/{{tableId}}/qr",
+            "description": "**Auth:** Staff. **Response 200:** `{ qr_url, table_code, branch_id }`"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "POST Create User",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"merchant_id\": \"uuid\",\n  \"name\": \"username\",\n  \"password\": \"password\",\n  \"role\": \"cashier\",\n  \"branch_id\": null\n}"
+            },
+            "url": "{{baseUrl}}/users",
+            "description": "**Auth:** Owner. **Body:** merchant_id, name, password, role (owner|manager|cashier|kitchen), branch_id?\n\n**Response 201:** user object (no password_hash)\n**Response 403:** Cannot create owner (if caller is manager)"
+          }
+        },
+        {
+          "name": "GET List Users",
+          "request": { "method": "GET", "url": "{{baseUrl}}/users", "description": "**Auth:** Owner. **Response 200:** array of users (no password_hash)" }
+        },
+        {
+          "name": "GET One User",
+          "request": { "method": "GET", "url": "{{baseUrl}}/users/{{userId}}", "description": "**Auth:** Owner. **Response 200:** user object" }
+        },
+        {
+          "name": "PATCH Update User",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"newname\",\n  \"role\": \"cashier\",\n  \"branch_id\": \"uuid\"\n}" },
+            "url": "{{baseUrl}}/users/{{userId}}",
+            "description": "**Auth:** Owner. **Body:** name?, role?, branch_id?\n\n**Response 200:** user"
+          }
+        },
+        {
+          "name": "PATCH User Status",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"active\"\n}" },
+            "url": "{{baseUrl}}/users/{{userId}}/status",
+            "description": "**Auth:** Owner. **Body:** status (active|disabled)\n\n**Response 200:** user"
+          }
+        },
+        {
+          "name": "PATCH User Password",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"password\": \"newpassword\"\n}" },
+            "url": "{{baseUrl}}/users/{{userId}}/password",
+            "description": "**Auth:** Owner. **Body:** password (min 6 chars)\n\n**Response 200:** user"
+          }
+        },
+        {
+          "name": "PATCH User Branch",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"branch_id\": \"uuid\"\n}" },
+            "url": "{{baseUrl}}/users/{{userId}}/branch",
+            "description": "**Auth:** Owner. **Body:** branch_id?\n\n**Response 200:** user"
+          }
+        },
+        {
+          "name": "DELETE User",
+          "request": { "method": "DELETE", "url": "{{baseUrl}}/users/{{userId}}", "description": "**Auth:** Owner. **Response 204**. Cannot delete yourself." }
+        }
+      ]
+    },
+    {
+      "name": "Menus",
+      "item": [
+        {
+          "name": "POST Create Menu",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name_ar\": \"قائمة\",\n  \"name_en\": \"Menu\",\n  \"currency\": \"EGP\",\n  \"is_active\": true\n}" },
+            "url": "{{baseUrl}}/menus",
+            "description": "**Auth:** Owner/Manager. **Body:** name_ar, name_en, currency (required), is_active?\n\n**Response 201:** menu object"
+          }
+        },
+        {
+          "name": "GET List Menus",
+          "request": { "method": "GET", "url": "{{baseUrl}}/menus", "description": "**Auth:** Owner/Manager. **Response 200:** array of menus" }
+        },
+        {
+          "name": "POST Create Category",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name_ar\": \"فئة\",\n  \"name_en\": \"Category\",\n  \"description_ar\": null,\n  \"description_en\": null,\n  \"sort_order\": 0,\n  \"img_url_1\": null,\n  \"is_active\": true\n}"
+            },
+            "url": "{{baseUrl}}/menus/{{menuId}}/categories",
+            "description": "**Auth:** Owner/Manager. **Body:** name_ar, name_en (required), description_ar?, description_en?, sort_order?, img_url_1?, is_active?\n\n**Response 201:** category"
+          }
+        },
+        {
+          "name": "GET List Categories",
+          "request": { "method": "GET", "url": "{{baseUrl}}/menus/{{menuId}}/categories", "description": "**Auth:** Owner/Manager. **Response 200:** array of categories" }
+        },
+        {
+          "name": "PATCH Update Menu",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name_ar\": \"\",\n  \"name_en\": \"\",\n  \"currency\": \"EGP\",\n  \"is_active\": true\n}" },
+            "url": "{{baseUrl}}/menus/{{menuId}}",
+            "description": "**Auth:** Owner/Manager. **Response 200:** menu"
+          }
+        },
+        {
+          "name": "DELETE Menu",
+          "request": { "method": "DELETE", "url": "{{baseUrl}}/menus/{{menuId}}", "description": "**Auth:** Owner/Manager. **Response 204**" }
+        }
+      ]
+    },
+    {
+      "name": "Categories",
+      "item": [
+        {
+          "name": "PATCH Reorder Categories",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"items\": [\n    { \"category_id\": \"uuid\", \"sort_order\": 0 },\n    { \"category_id\": \"uuid2\", \"sort_order\": 1 }\n  ]\n}" },
+            "url": "{{baseUrl}}/categories/reorder",
+            "description": "**Auth:** Owner/Manager. **Body:** items (array of { category_id, sort_order })\n\n**Response 200:** `{ ok: true }`"
+          }
+        },
+        {
+          "name": "PATCH Update Category",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name_ar\": \"\",\n  \"name_en\": \"\",\n  \"description_ar\": null,\n  \"description_en\": null,\n  \"sort_order\": 0,\n  \"img_url_1\": null,\n  \"is_active\": true\n}" },
+            "url": "{{baseUrl}}/categories/{{categoryId}}",
+            "description": "**Auth:** Owner/Manager. **Response 200:** category"
+          }
+        },
+        {
+          "name": "DELETE Category",
+          "request": { "method": "DELETE", "url": "{{baseUrl}}/categories/{{categoryId}}", "description": "**Auth:** Owner/Manager. **Response 204**" }
+        }
+      ]
+    },
+    {
+      "name": "Items",
+      "item": [
+        {
+          "name": "POST Create Item",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name_ar\": \"صنف\",\n  \"name_en\": \"Item\",\n  \"base_price\": 25.5,\n  \"description_ar\": null,\n  \"description_en\": null,\n  \"status\": \"active\"\n}"
+            },
+            "url": "{{baseUrl}}/categories/{{categoryId}}/items",
+            "description": "**Auth:** Owner/Manager. **Body:** name_ar, name_en, base_price (required), description_ar?, description_en?, status? (active|hidden|out_of_stock)\n\n**Response 201:** item"
+          }
+        },
+        {
+          "name": "GET List Items by Category",
+              "request": { "method": "GET", "url": "{{baseUrl}}/categories/{{categoryId}}/items", "description": "**Auth:** Owner/Manager. **Response 200:** array of items" }
+        },
+        {
+          "name": "GET One Item",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/items/{{itemId}}",
+            "description": "**Auth:** Owner/Manager. **Response 200:** item with variants and modifier_groups"
+          }
+        },
+        {
+          "name": "PATCH Update Item",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name_ar\": \"\",\n  \"name_en\": \"\",\n  \"base_price\": 0,\n  \"description_ar\": null,\n  \"description_en\": null,\n  \"status\": \"active\"\n}" },
+            "url": "{{baseUrl}}/items/{{itemId}}",
+            "description": "**Auth:** Owner/Manager. **Response 200:** item"
+          }
+        },
+        {
+          "name": "PATCH Item Status",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"active\"\n}" },
+            "url": "{{baseUrl}}/items/{{itemId}}/status",
+            "description": "**Auth:** Owner/Manager. **Body:** status (active|hidden|out_of_stock)\n\n**Response 200:** item"
+          }
+        },
+        {
+          "name": "DELETE Item",
+          "request": { "method": "DELETE", "url": "{{baseUrl}}/items/{{itemId}}", "description": "**Auth:** Owner/Manager. **Response 204**" }
+        }
+      ]
+    },
+    {
+      "name": "Variants",
+      "item": [
+        {
+          "name": "POST Create Variant",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name_ar\": \"حجم كبير\",\n  \"name_en\": \"Large\",\n  \"price\": 35\n}" },
+            "url": "{{baseUrl}}/items/{{itemId}}/variants",
+            "description": "**Auth:** Owner/Manager. **Body:** name_ar, name_en, price (required)\n\n**Response 201:** variant"
+          }
+        },
+        {
+          "name": "GET List Variants",
+          "request": { "method": "GET", "url": "{{baseUrl}}/items/{{itemId}}/variants", "description": "**Auth:** Owner/Manager. **Response 200:** array of variants" }
+        },
+        {
+          "name": "PATCH Update Variant",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name_ar\": \"\",\n  \"name_en\": \"\",\n  \"price\": 0\n}" },
+            "url": "{{baseUrl}}/variants/{{variantId}}",
+            "description": "**Auth:** Owner/Manager. **Response 200:** variant"
+          }
+        },
+        {
+          "name": "DELETE Variant",
+          "request": { "method": "DELETE", "url": "{{baseUrl}}/variants/{{variantId}}", "description": "**Auth:** Owner/Manager. **Response 204**" }
+        }
+      ]
+    },
+    {
+      "name": "Modifiers",
+      "item": [
+        {
+          "name": "POST Create Modifier Group",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name_ar\": \"إضافات\",\n  \"name_en\": \"Add-ons\"\n}" },
+            "url": "{{baseUrl}}/modifier-groups",
+            "description": "**Auth:** Owner/Manager. **Body:** name_ar, name_en (required)\n\n**Response 201:** modifier_group"
+          }
+        },
+        {
+          "name": "GET List Modifier Groups",
+          "request": { "method": "GET", "url": "{{baseUrl}}/modifier-groups", "description": "**Auth:** Owner/Manager. **Response 200:** array of groups" }
+        },
+        {
+          "name": "PATCH Update Modifier Group",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name_ar\": \"\",\n  \"name_en\": \"\"\n}" },
+            "url": "{{baseUrl}}/modifier-groups/{{groupId}}",
+            "description": "**Auth:** Owner/Manager. **Response 200:** group"
+          }
+        },
+        {
+          "name": "DELETE Modifier Group",
+          "request": { "method": "DELETE", "url": "{{baseUrl}}/modifier-groups/{{groupId}}", "description": "**Auth:** Owner/Manager. **Response 204**" }
+        },
+        {
+          "name": "POST Create Modifier",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name_ar\": \"إضافة\",\n  \"name_en\": \"Extra\",\n  \"price\": 5\n}" },
+            "url": "{{baseUrl}}/modifier-groups/{{groupId}}/modifiers",
+            "description": "**Auth:** Owner/Manager. **Body:** name_ar, name_en, price (required)\n\n**Response 201:** modifier"
+          }
+        },
+        {
+          "name": "GET List Modifiers",
+          "request": { "method": "GET", "url": "{{baseUrl}}/modifier-groups/{{groupId}}/modifiers", "description": "**Auth:** Owner/Manager. **Response 200:** array of modifiers" }
+        },
+        {
+          "name": "PATCH Update Modifier",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name_ar\": \"\",\n  \"name_en\": \"\",\n  \"price\": 0\n}" },
+            "url": "{{baseUrl}}/modifiers/{{modifierId}}",
+            "description": "**Auth:** Owner/Manager. **Response 200:** modifier"
+          }
+        },
+        {
+          "name": "DELETE Modifier",
+          "request": { "method": "DELETE", "url": "{{baseUrl}}/modifiers/{{modifierId}}", "description": "**Auth:** Owner/Manager. **Response 204**" }
+        },
+        {
+          "name": "POST Attach Group to Item",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"modifier_group_id\": \"uuid\",\n  \"min_select\": 0,\n  \"max_select\": 3\n}" },
+            "url": "{{baseUrl}}/items/{{itemId}}/modifier-groups",
+            "description": "**Auth:** Owner/Manager. **Body:** modifier_group_id, min_select, max_select (required)\n\n**Response 201:** item_modifier_group row"
+          }
+        },
+        {
+          "name": "GET Item Modifier Groups",
+          "request": { "method": "GET", "url": "{{baseUrl}}/items/{{itemId}}/modifier-groups", "description": "**Auth:** Owner/Manager. **Response 200:** array" }
+        },
+        {
+          "name": "PATCH Item Modifier Group",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"min_select\": 0,\n  \"max_select\": 2\n}" },
+            "url": "{{baseUrl}}/items/{{itemId}}/modifier-groups/{{groupId}}",
+            "description": "**Auth:** Owner/Manager. **Response 200:** link row"
+          }
+        },
+        {
+          "name": "DELETE Detach Group from Item",
+          "request": { "method": "DELETE", "url": "{{baseUrl}}/items/{{itemId}}/modifier-groups/{{groupId}}", "description": "**Auth:** Owner/Manager. **Response 204**" }
+        }
+      ]
+    },
+    {
+      "name": "Kitchen",
+      "item": [
+        {
+          "name": "GET Kitchen Orders",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/kitchen/orders",
+            "description": "**Auth:** Staff. **Query:** branch_id? (kitchen/cashier limited to their branch)\n\n**Response 200:** array of orders"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Cashier",
+      "item": [
+        {
+          "name": "GET Cashier Orders",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/cashier/orders",
+            "description": "**Auth:** Staff. **Query:** branch_id?\n\n**Response 200:** array of orders"
+          }
+        }
+      ]
+    }
+  ]
+}
