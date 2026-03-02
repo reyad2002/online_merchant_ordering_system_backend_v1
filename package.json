@@ -7,6 +7,7 @@
     "run:dev": "nodemon index.js",
     "seed": "node scripts/seed-owner.js",
     "test": "echo \"Error: no test specified\" && exit 1"
+
   },
   "keywords": [],
   "author": "",
