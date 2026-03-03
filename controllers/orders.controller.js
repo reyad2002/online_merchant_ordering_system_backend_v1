@@ -103,6 +103,15 @@ async function validateModifierRules(merchantId, itemId, itemName, selectedModif
   return { valid: true };
 }
 
+/** Get branch IDs for a merchant (order table has branch_id, not merchant_id). */
+async function getBranchIdsForMerchant(merchantId) {
+  const { data: branches } = await supabaseAdmin
+    .from("branch")
+    .select("id")
+    .eq("merchant_id", merchantId);
+  return (branches || []).map((b) => b.id);
+}
+
 /** Rollback: delete order and its order_items + order_item_modifier (all-or-nothing). */
 async function rollbackOrder(orderId) {
   const { data: orderItems } = await supabaseAdmin
@@ -275,7 +284,6 @@ export async function create(req, res) {
   const { data: order, error: orderError } = await supabaseAdmin
     .from("order")
     .insert({
-      merchant_id,
       branch_id,
       table_id: table_id || null,
       order_number,
@@ -345,10 +353,14 @@ export async function list(req, res) {
       return res.status(403).json({ error: "Access limited to your branch" });
     }
   }
+  const branchIds = await getBranchIdsForMerchant(req.user.merchant_id);
+  if (!branchIds.length) {
+    return res.json({ data: [], next_cursor: null });
+  }
   let query = supabaseAdmin
     .from("order")
     .select("*")
-    .eq("merchant_id", req.user.merchant_id);
+    .in("branch_id", branchIds);
   if (branch_id) query = query.eq("branch_id", branch_id);
   if (
     req.user.branch_id &&
@@ -384,10 +396,16 @@ export async function getOne(req, res) {
     .from("order")
     .select("*")
     .eq("id", orderId)
-    .eq("merchant_id", req.user.merchant_id)
     .single();
-  if (error || !order)
+  if (error || !order) return res.status(404).json({ error: "Order not found" });
+  const { data: branch } = await supabaseAdmin
+    .from("branch")
+    .select("merchant_id")
+    .eq("id", order.branch_id)
+    .single();
+  if (!branch || branch.merchant_id !== req.user.merchant_id) {
     return res.status(404).json({ error: "Order not found" });
+  }
   if (
     (req.user.role === "cashier" || req.user.role === "kitchen") &&
     order.branch_id !== req.user.branch_id
@@ -419,9 +437,16 @@ export async function updateStatus(req, res) {
     .from("order")
     .select("branch_id")
     .eq("id", orderId)
-    .eq("merchant_id", req.user.merchant_id)
     .single();
   if (!order) return res.status(404).json({ error: "Order not found" });
+  const { data: branch } = await supabaseAdmin
+    .from("branch")
+    .select("merchant_id")
+    .eq("id", order.branch_id)
+    .single();
+  if (!branch || branch.merchant_id !== req.user.merchant_id) {
+    return res.status(404).json({ error: "Order not found" });
+  }
   if (
     (req.user.role === "cashier" || req.user.role === "kitchen") &&
     order.branch_id !== req.user.branch_id
@@ -432,7 +457,6 @@ export async function updateStatus(req, res) {
     .from("order")
     .update({ status })
     .eq("id", orderId)
-    .eq("merchant_id", req.user.merchant_id)
     .select()
     .single();
   if (error) return res.status(400).json({ error: error.message });
