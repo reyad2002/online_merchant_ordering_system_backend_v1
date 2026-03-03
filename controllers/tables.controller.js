@@ -28,6 +28,11 @@ export async function update(req, res) {
 
 export async function remove(req, res) {
   const { tableId } = req.params;
+  // حذف البيانات المرتبطة (tables_qrcode) قبل حذف الطاولة
+  await supabaseAdmin
+    .from("tables_qrcode")
+    .delete()
+    .eq("table_id", tableId);
   const { error } = await supabaseAdmin
     .from("table")
     .delete()
