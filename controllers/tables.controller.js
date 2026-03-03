@@ -11,7 +11,8 @@ function pick(obj, keys) {
 export async function update(req, res) {
   const { tableId } = req.params;
   const updates = pick(req.body || {}, ALLOWED_UPDATE);
-  if (Object.keys(updates).length === 0) return res.status(400).json({ error: "No valid fields to update" });
+  if (Object.keys(updates).length === 0)
+    return res.status(400).json({ error: "No valid fields to update" });
   const { data, error } = await supabaseAdmin
     .from("table")
     .update(updates)
@@ -43,8 +44,8 @@ export async function getQr(req, res) {
     .eq("id", tableId)
     .single();
   if (error || !row) return res.status(404).json({ error: "Table not found" });
-  const baseUrl = process.env.PUBLIC_MENU_BASE_URL || "https://menu.example.com";
-  const qr_url = `${baseUrl}/m?tableCode=${encodeURIComponent(row.qr_code || "")}`;
+  const baseUrl = "https://online-merchant-ordering-system-fro.vercel.app";
+  const qr_url = `${baseUrl}/menu?merchantId=${row.merchant_id}&tableCode=${encodeURIComponent(row.qr_code || "")}`;
   res.json({
     qr_url,
     table_code: row.qr_code,
