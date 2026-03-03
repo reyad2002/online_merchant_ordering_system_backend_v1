@@ -7,7 +7,6 @@
     "run:dev": "nodemon index.js",
     "seed": "node scripts/seed-owner.js",
     "test": "echo \"Error: no test specified\" && exit 1"
-
   },
   "keywords": [],
   "author": "",
@@ -26,6 +25,7 @@
     "multer": "^2.1.0",
     "nodemailer": "^8.0.1",
     "nodemon": "^3.1.14",
+    "qrcode": "^1.5.4",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",
     "uuid": "^13.0.0",

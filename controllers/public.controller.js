@@ -1,5 +1,18 @@
 import { supabaseAdmin } from "../db_connection.js";
 
+/** Get stored table QR code by table id (public, no auth). */
+export async function getTableQrcodeByTableId(req, res) {
+  const { tableId } = req.params;
+  const { data, error } = await supabaseAdmin
+    .from("tables_qrcode")
+    .select("*")
+    .eq("table_id", tableId)
+    .maybeSingle();
+  if (error) return res.status(500).json({ error: error.message });
+  if (!data) return res.status(404).json({ error: "QR code not found for this table" });
+  res.json(data);
+}
+
 export async function getMenu(req, res) {
   const { merchantId, tableCode } = req.query;
   if (!merchantId)

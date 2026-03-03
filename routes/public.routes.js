@@ -6,6 +6,7 @@ const router = Router();
 
 router.get("/menu", asyncHandler(publicController.getMenu));
 router.post("/cart/validate", asyncHandler(publicController.validateCart));
-router.get("/:menuId/list-short-categories", asyncHandler(menusController.listShortCategories));
+router.get("/table/:tableId/qrcode", asyncHandler(publicController.getTableQrcodeByTableId));
+// router.get("/:menuId/list-short-categories", asyncHandler(menusController.listShortCategories));
 
 export default router;
