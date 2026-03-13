@@ -3,7 +3,7 @@ import { supabaseAdmin } from "../db_connection.js";
 export async function listOrders(req, res) {
   const { branch_id, status } = req.query;
   const branchId = branch_id || req.user.branch_id;
-  if (req.user.role === "kitchen" && branchId !== req.user.branch_id) {
+  if (req.user.role === "kitchen" && String(branchId) !== String(req.user.branch_id)) {
     return res.status(403).json({ error: "Access limited to your branch" });
   }
   let query = supabaseAdmin

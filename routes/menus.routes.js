@@ -4,7 +4,7 @@ import {
   requireAuth,
   requireMerchant,
   requireCanEditMenu,
-  requireStaff
+  requireStaff,
 } from "../middleware/auth.js";
 import * as menusController from "../controllers/menus.controller.js";
 
@@ -20,8 +20,25 @@ router.post(
   requireCanEditMenu,
   asyncHandler(menusController.createCategory),
 );
-router.get("/:menuId/categories", requireStaff, asyncHandler(menusController.listCategories));
-router.patch("/:menuId", requireCanEditMenu, asyncHandler(menusController.update));
-router.delete("/:menuId",requireCanEditMenu, asyncHandler(menusController.remove));
+router.get(
+  "/:menuId/categories",
+  requireStaff,
+  asyncHandler(menusController.listCategories),
+);
+router.get(
+  "/:menuId/categories/short",
+  requireStaff,
+  asyncHandler(menusController.listShortCategories),
+);
+router.patch(
+  "/:menuId",
+  requireCanEditMenu,
+  asyncHandler(menusController.update),
+);
+router.delete(
+  "/:menuId",
+  requireCanEditMenu,
+  asyncHandler(menusController.remove),
+);
 
 export default router;

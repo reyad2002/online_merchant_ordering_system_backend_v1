@@ -196,6 +196,21 @@ export async function getMenu(req, res) {
       .eq("category_id", cat.id)
       .eq("status", "active");
     const itemsWithDetails = [];
+    const itemIds = (items || []).map((i) => i.id);
+    const { data: imagesRows } =
+      itemIds.length > 0
+        ? await supabaseAdmin
+            .from("item_images")
+            .select("item_id, img_url_1, img_url_2")
+            .in("item_id", itemIds)
+        : { data: [] };
+    const imagesByItemId = {};
+    for (const row of imagesRows || []) {
+      imagesByItemId[row.item_id] = {
+        img_url_1: row.img_url_1 ?? null,
+        img_url_2: row.img_url_2 ?? null,
+      };
+    }
     for (const it of items || []) {
       const { data: variants } = await supabaseAdmin
         .from("item_variant")
@@ -226,6 +241,7 @@ export async function getMenu(req, res) {
       }
       itemsWithDetails.push({
         ...it,
+        images: imagesByItemId[it.id] ?? { img_url_1: null, img_url_2: null },
         variants: variants || [],
         modifier_groups,
       });
@@ -304,6 +320,21 @@ export async function getMenuById(req, res) {
       .eq("category_id", cat.id)
       .eq("status", "active");
     const itemsWithDetails = [];
+    const itemIds = (items || []).map((i) => i.id);
+    const { data: imagesRows } =
+      itemIds.length > 0
+        ? await supabaseAdmin
+            .from("item_images")
+            .select("item_id, img_url_1, img_url_2")
+            .in("item_id", itemIds)
+        : { data: [] };
+    const imagesByItemId = {};
+    for (const row of imagesRows || []) {
+      imagesByItemId[row.item_id] = {
+        img_url_1: row.img_url_1 ?? null,
+        img_url_2: row.img_url_2 ?? null,
+      };
+    }
     for (const it of items || []) {
       const { data: variants } = await supabaseAdmin
         .from("item_variant")
@@ -334,6 +365,7 @@ export async function getMenuById(req, res) {
       }
       itemsWithDetails.push({
         ...it,
+        images: imagesByItemId[it.id] ?? { img_url_1: null, img_url_2: null },
         variants: variants || [],
         modifier_groups,
       });

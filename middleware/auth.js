@@ -141,7 +141,7 @@ export function requireBranchAccess(req, res, next) {
   if (!req.user) return res.status(401).json({ error: "Unauthorized" });
   if (MANAGER_ROLES.includes(req.user.role)) return next();
   const branchId = req.params.branchId || req.query.branch_id;
-  if (!branchId || req.user.branch_id !== branchId) {
+  if (!branchId || String(req.user.branch_id) !== String(branchId)) {
     return res.status(403).json({ error: "Access limited to your branch" });
   }
   next();

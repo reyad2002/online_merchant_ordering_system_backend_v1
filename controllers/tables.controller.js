@@ -75,18 +75,27 @@ export async function getQr(req, res) {
   const baseUrl =
     process.env.MENU_FRONTEND_URL ||
     "https://online-merchant-ordering-system-fro.vercel.app";
-    // "http://localhost:3000";
+  // "http://localhost:3000";
   // يفضل تحط tableCode + exp طويل
   const token = jwt.sign(
-    { tableId, merchantId: row.merchant_id, tableCode: row.qr_code , branchId: row.branch_id},
-    process.env.JWT_TABLE_SECRET
+    {
+      tableId,
+      merchantId: row.merchant_id,
+      tableCode: row.qr_code,
+      branchId: row.branch_id,
+    },
+    process.env.JWT_TABLE_SECRET,
   );
 
   const qr_url = `${baseUrl}/menu?t=${token}`;
 
   let qr_svg;
   try {
-    qr_svg = await QRCode.toString(qr_url, { type: "svg", margin: 2, width: 256 });
+    qr_svg = await QRCode.toString(qr_url, {
+      type: "svg",
+      margin: 2,
+      width: 256,
+    });
   } catch (err) {
     return res.status(500).json({
       error: "Failed to generate QR code",
@@ -115,11 +124,9 @@ export async function getStoredQr(req, res) {
     .maybeSingle();
   if (error) return res.status(500).json({ error: error.message });
   if (!data)
-    return res
-      .status(404)
-      .json({
-        error:
-          "QR code not found for this table. Generate it first via GET /tables/:tableId/qr",
-      });
+    return res.status(404).json({
+      error:
+        "QR code not found for this table. Generate it first via GET /tables/:tableId/qr",
+    });
   res.json(data);
 }

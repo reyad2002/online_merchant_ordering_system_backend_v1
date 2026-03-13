@@ -119,6 +119,84 @@ async function getBranchIdsForMerchant(merchantId) {
   return (branches || []).map((b) => b.id);
 }
 
+function normalizePage(value) {
+  const page = Number(value);
+  return Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
+}
+
+function normalizeLimit(value) {
+  const limit = Number(value);
+  if (!Number.isFinite(limit) || limit <= 0) return 20;
+  return Math.min(Math.floor(limit), 100);
+}
+
+const ALLOWED_ORDER_SORT_FIELDS = new Set([
+  "created_at",
+  "total_price",
+  "order_number",
+  "status",
+]);
+
+function normalizeSortBy(value) {
+  return ALLOWED_ORDER_SORT_FIELDS.has(value) ? value : "created_at";
+}
+
+function normalizeSortDir(value) {
+  return String(value).toLowerCase() === "asc" ? "asc" : "desc";
+}
+
+async function enrichOrdersWithContext(orders) {
+  if (!orders?.length) return [];
+
+  const branchIds = [
+    ...new Set(orders.map((order) => order.branch_id).filter(Boolean)),
+  ];
+  const tableIds = [
+    ...new Set(orders.map((order) => order.table_id).filter(Boolean)),
+  ];
+
+  const [branchesRes, tablesRes] = await Promise.all([
+    branchIds.length
+      ? supabaseAdmin.from("branch").select("id, name").in("id", branchIds)
+      : Promise.resolve({ data: [] }),
+    tableIds.length
+      ? supabaseAdmin
+          .from("table")
+          .select("id, number, branch_id")
+          .in("id", tableIds)
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  const branchMap = new Map(
+    (branchesRes.data || []).map((branch) => [String(branch.id), branch]),
+  );
+  const tableMap = new Map(
+    (tablesRes.data || []).map((table) => [String(table.id), table]),
+  );
+
+  return orders.map((order) => {
+    const branch = branchMap.get(String(order.branch_id)) || null;
+    const table = order.table_id
+      ? tableMap.get(String(order.table_id)) || null
+      : null;
+
+    return {
+      ...order,
+      branch_name: branch?.name ?? null,
+      table_number: table?.number != null ? String(table.number) : null,
+      branch: branch
+        ? { id: branch.id, name: branch.name }
+        : { id: order.branch_id, name: null },
+      table: order.table_id
+        ? {
+            id: order.table_id,
+            number: table?.number != null ? String(table.number) : null,
+          }
+        : null,
+    };
+  });
+}
+
 /** Rollback: delete order and its order_items + order_item_modifier (all-or-nothing). */
 async function rollbackOrder(orderId) {
   const { data: orderItems } = await supabaseAdmin
@@ -180,11 +258,9 @@ export async function create(req, res) {
     .eq("id", tokenBranchId)
     .single();
   if (!branch || branch.merchant_id !== tokenMerchantId) {
-    return res
-      .status(400)
-      .json({
-        error: "tokenBranchId must belong to the given tokenMerchantId",
-      });
+    return res.status(400).json({
+      error: "tokenBranchId must belong to the given tokenMerchantId",
+    });
   }
   // validate table
   if (tokenTableId) {
@@ -202,7 +278,7 @@ export async function create(req, res) {
   // get next order number
   const order_number = await getNextOrderNumber(tokenBranchId);
   let total_price = 0;
-  
+
   const orderRows = [];
   const modifierRows = [];
   // validate items
@@ -425,20 +501,89 @@ export async function create(req, res) {
 }
 
 export async function list(req, res) {
-  const { branch_id, status, from, to, q, limit = 50, cursor } = req.query;
+  const {
+    branch_id,
+    status,
+    from,
+    to,
+    q,
+    cursor,
+    page = 1,
+    limit = 20,
+    table_id,
+    table_number,
+    min_total,
+    max_total,
+    sort_by,
+    sort_dir,
+  } = req.query;
+  const pageNum = normalizePage(page);
+  const limitNum = normalizeLimit(limit);
+  const sortBy = normalizeSortBy(sort_by);
+  const sortDir = normalizeSortDir(sort_dir);
   if (req.user.role === "cashier" || req.user.role === "kitchen") {
     const scopeBranch = branch_id || req.user.branch_id;
-    if (!scopeBranch || scopeBranch !== req.user.branch_id) {
+    if (!scopeBranch || String(scopeBranch) !== String(req.user.branch_id)) {
       return res.status(403).json({ error: "Access limited to your branch" });
     }
   }
   const branchIds = await getBranchIdsForMerchant(req.user.merchant_id);
   if (!branchIds.length) {
-    return res.json({ data: [], next_cursor: null });
+    return res.json({
+      data: [],
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total: 0,
+        total_pages: 0,
+        has_next: false,
+        has_prev: pageNum > 1,
+      },
+      next_cursor: null,
+    });
   }
+
+  let filteredTableIds = null;
+  if (table_number) {
+    let tablesQuery = supabaseAdmin
+      .from("table")
+      .select("id")
+      .eq("number", String(table_number).trim());
+
+    if (branch_id) {
+      tablesQuery = tablesQuery.eq("branch_id", branch_id);
+    } else if (
+      req.user.branch_id &&
+      (req.user.role === "cashier" || req.user.role === "kitchen")
+    ) {
+      tablesQuery = tablesQuery.eq("branch_id", req.user.branch_id);
+    } else {
+      tablesQuery = tablesQuery.in("branch_id", branchIds);
+    }
+
+    const { data: tables, error: tablesError } = await tablesQuery;
+    if (tablesError) return res.status(500).json({ error: tablesError.message });
+
+    filteredTableIds = (tables || []).map((table) => table.id);
+    if (!filteredTableIds.length) {
+      return res.json({
+        data: [],
+        pagination: {
+          page: pageNum,
+          limit: limitNum,
+          total: 0,
+          total_pages: 0,
+          has_next: false,
+          has_prev: pageNum > 1,
+        },
+        next_cursor: null,
+      });
+    }
+  }
+
   let query = supabaseAdmin
     .from("order")
-    .select("*")
+    .select("*", { count: "exact" })
     .in("branch_id", branchIds);
   if (branch_id) query = query.eq("branch_id", branch_id);
   if (
@@ -451,20 +596,45 @@ export async function list(req, res) {
     const statuses = status.split(",").map((s) => s.trim());
     query = query.in("status", statuses);
   }
+  if (table_id) query = query.eq("table_id", table_id);
+  if (filteredTableIds) query = query.in("table_id", filteredTableIds);
+  if (min_total !== undefined && min_total !== "") {
+    query = query.gte("total_price", Number(min_total));
+  }
+  if (max_total !== undefined && max_total !== "") {
+    query = query.lte("total_price", Number(max_total));
+  }
   if (from) query = query.gte("created_at", from);
   if (to) query = query.lte("created_at", to);
   if (q) query = query.ilike("order_number", `%${q}%`);
-  query = query
-    .order("created_at", { ascending: false })
-    .limit(Math.min(Number(limit) || 50, 100));
   if (cursor) query = query.lt("created_at", cursor);
-  const { data, error } = await query;
+
+  const fromIndex = (pageNum - 1) * limitNum;
+  const toIndex = fromIndex + limitNum - 1;
+
+  query = query
+    .order(sortBy, { ascending: sortDir === "asc" })
+    .order("created_at", { ascending: false })
+    .range(fromIndex, toIndex);
+
+  const { data, error, count } = await query;
   if (error) return res.status(500).json({ error: error.message });
+  const enrichedData = await enrichOrdersWithContext(data || []);
+  const total = count || 0;
+  const totalPages = total > 0 ? Math.ceil(total / limitNum) : 0;
   res.json({
-    data: data || [],
+    data: enrichedData,
+    pagination: {
+      page: pageNum,
+      limit: limitNum,
+      total,
+      total_pages: totalPages,
+      has_next: pageNum < totalPages,
+      has_prev: pageNum > 1,
+    },
     next_cursor:
-      data?.length === (Number(limit) || 50)
-        ? data[data.length - 1]?.created_at
+      enrichedData.length === limitNum
+        ? enrichedData[enrichedData.length - 1]?.created_at
         : null,
   });
 }
@@ -480,7 +650,7 @@ export async function getOne(req, res) {
     return res.status(404).json({ error: "Order not found" });
   const { data: branch } = await supabaseAdmin
     .from("branch")
-    .select("merchant_id")
+    .select("id, merchant_id, name")
     .eq("id", order.branch_id)
     .single();
   if (!branch || branch.merchant_id !== req.user.merchant_id) {
@@ -488,7 +658,7 @@ export async function getOne(req, res) {
   }
   if (
     (req.user.role === "cashier" || req.user.role === "kitchen") &&
-    order.branch_id !== req.user.branch_id
+    String(order.branch_id) !== String(req.user.branch_id)
   ) {
     return res.status(403).json({ error: "Access limited to your branch" });
   }
@@ -496,6 +666,13 @@ export async function getOne(req, res) {
     .from("order_items")
     .select("*")
     .eq("order_id", orderId);
+  const { data: table } = order.table_id
+    ? await supabaseAdmin
+        .from("table")
+        .select("id, number")
+        .eq("id", order.table_id)
+        .maybeSingle()
+    : { data: null };
   const itemsWithMods = [];
   for (const oi of orderItems || []) {
     const { data: mods } = await supabaseAdmin
@@ -504,7 +681,19 @@ export async function getOne(req, res) {
       .eq("order_item_id", oi.id);
     itemsWithMods.push({ ...oi, modifiers: mods || [] });
   }
-  res.json({ ...order, items: itemsWithMods });
+  res.json({
+    ...order,
+    branch_name: branch.name ?? null,
+    table_number: table?.number != null ? String(table.number) : null,
+    branch: { id: branch.id, name: branch.name ?? null },
+    table: order.table_id
+      ? {
+          id: order.table_id,
+          number: table?.number != null ? String(table.number) : null,
+        }
+      : null,
+    items: itemsWithMods,
+  });
 }
 
 export async function updateStatus(req, res) {
@@ -529,7 +718,7 @@ export async function updateStatus(req, res) {
   }
   if (
     (req.user.role === "cashier" || req.user.role === "kitchen") &&
-    order.branch_id !== req.user.branch_id
+    String(order.branch_id) !== String(req.user.branch_id)
   ) {
     return res.status(403).json({ error: "Access limited to your branch" });
   }

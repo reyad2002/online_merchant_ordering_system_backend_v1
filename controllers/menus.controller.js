@@ -102,12 +102,12 @@ export async function listCategories(req, res) {
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
 }
-
+// make arout for this function
 export async function listShortCategories(req, res) {
   const { menuId } = req.params;
   const { data, error } = await supabaseAdmin
     .from("category")
-    .select("id, name_ar, name_en, img_url_1")
+    .select("id, name_ar, name_en")
     .eq("menue_id", menuId)
     .order("sort_order");
   if (error) return res.status(500).json({ error: error.message });

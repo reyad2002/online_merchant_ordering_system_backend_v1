@@ -14,21 +14,21 @@ router.get(
   "/",
   requireAuth,
   requireMerchant,
-  requireStaff,
+  // requireStaff,
   asyncHandler(ordersController.list),
 );
 router.get(
   "/:orderId",
   requireAuth,
   requireMerchant,
-  requireStaff,
+  // requireStaff,
   asyncHandler(ordersController.getOne),
 );
 router.patch(
   "/:orderId/status",
   requireAuth,
   requireMerchant,
-  requireStaff,
+  // requireStaff,
   asyncHandler(ordersController.updateStatus),
 );
 

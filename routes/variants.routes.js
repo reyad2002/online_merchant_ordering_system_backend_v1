@@ -4,20 +4,27 @@ import {
   requireAuth,
   requireMerchant,
   requireCanEditMenu,
+  requireStaff,
 } from "../middleware/auth.js";
 import * as variantsController from "../controllers/variants.controller.js";
 
 const router = Router();
 router.use(requireAuth);
 router.use(requireMerchant);
-router.use(requireCanEditMenu);
-
-router.post("/items/:itemId/variants", asyncHandler(variantsController.create));
+// (owner & manager)
+router.post(
+  "/items/:itemId/variants",
+  requireCanEditMenu,
+  asyncHandler(variantsController.create),
+);
 router.get(
   "/items/:itemId/variants",
+  requireStaff,
   asyncHandler(variantsController.listByItem),
 );
-router.patch("/variants/:variantId", asyncHandler(variantsController.update));
-router.delete("/variants/:variantId", asyncHandler(variantsController.remove));
+// (owner & manager)
+router.patch("/variants/:variantId", requireCanEditMenu, asyncHandler(variantsController.update));
+// (owner & manager)
+router.delete("/variants/:variantId", requireCanEditMenu, asyncHandler(variantsController.remove));
 
 export default router;
